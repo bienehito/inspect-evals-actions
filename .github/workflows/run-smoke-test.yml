@@ -9,6 +9,11 @@ name: Smoke Test
         required: false
         default: ""
         type: string
+      triage_test_run_id:
+        description: "Existing failed ArcadiaImpact smoke-test run ID for a dispatch-only test"
+        required: false
+        default: ""
+        type: string
   schedule:
     - cron: "0 2 * * *"
 
@@ -28,6 +33,7 @@ env:
 jobs:
   smoke-test:
     name: Smoke test
+    if: github.event_name != 'workflow_dispatch' || inputs.triage_test_run_id == ''
     runs-on: ubuntu-latest-8-cores
     steps:
       - name: Checkout inspect_evals repository
@@ -171,3 +177,27 @@ jobs:
             repos/Generality-Labs/bienehito-experimental/dispatches \
             -f event_type=triage \
             -f "client_payload[prompt]=Triage failing CI job 'Summarise smoke tests (Linux)' in https://github.com/ArcadiaImpact/inspect-evals-actions/actions/runs/$GITHUB_RUN_ID"
+
+  triage-dispatch-test:
+    name: Test triage dispatch from PR branch
+    if: github.event_name == 'workflow_dispatch' && inputs.triage_test_run_id != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch a known failed smoke job
+        env:
+          GH_TOKEN: ${{ secrets.CI_TRIAGE_DISPATCH_TOKEN }}
+          TRIAGE_TEST_RUN_ID: ${{ inputs.triage_test_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TRIAGE_TEST_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo 'triage_test_run_id must be numeric' >&2
+            exit 1
+          fi
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo 'CI_TRIAGE_DISPATCH_TOKEN is required' >&2
+            exit 1
+          fi
+          gh api -X POST \
+            repos/Generality-Labs/bienehito-experimental/dispatches \
+            -f event_type=triage \
+            -f "client_payload[prompt]=Triage failing CI job 'Summarise smoke tests (Linux)' in https://github.com/ArcadiaImpact/inspect-evals-actions/actions/runs/$TRIAGE_TEST_RUN_ID"
